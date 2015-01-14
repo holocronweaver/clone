@@ -8,7 +8,7 @@ used to parse the URL for upstream repo and add it to your clone as a
 remote called (surprise!) `upstream`.
 
 
-Example 1
+git example
 ===
 
 If you have created a fork of `clone`, you could clone it using
@@ -16,8 +16,9 @@ If you have created a fork of `clone`, you could clone it using
 clone git@github.com:username/clone.git
 ```
 with your GitHub username in place of `username`.
+The upstream repo will automatically be added to your clone as a remote called `upstream`.
 
-Example 2
+Mercurial example
 ===
 
 If you have a fork of the 3D rendering system `ogre` on BitBucket, you could
