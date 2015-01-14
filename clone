@@ -1,0 +1,98 @@
+#! /usr/bin/env python3
+description='''
+A wrapper for repo cloning commands for various DVCS.
+Automatically adds the upstream URL when cloning a forked repo from
+popular DVCS web hosts.
+Currently supports:
+ (DVCS: git, Mercurial)
+ (hosts: GitHub, Bitbucket)
+'''
+# Created by Jesse Johnson a.k.a. holocronweaver (2014-10-08).
+import argparse
+import re
+import subprocess
+import urllib.request
+
+from bs4 import BeautifulSoup
+
+def find(regex, string, errorMessage):
+    '''Return value at regex, or else print error message and exit program.'''
+    m = re.search(regex, string)
+    if (m):
+        return m.group(1)
+    else:
+        print('Error:', errorMessage)
+        exit()
+
+parser = argparse.ArgumentParser(description=description)
+parser.add_argument('origin', metavar='O', type=str,
+                    help='the SSH URL of origin repo, optionally'
+                    'followed by its destination folder')
+args = parser.parse_args()
+
+# Parse destination.
+splitArgs = re.split('\s+', args.origin)
+if len(splitArgs) > 1:
+    origin = splitArgs[0]
+    destination = splitArgs[1]
+else:
+    origin = args.origin
+    destination = find('@.*\.\w+[:|/].*/(.*)[.git]?$', origin,
+                            'Error: Could not parse destination folder from origin URL.')
+    destination = re.sub('\.git', '', destination)
+print('destination folder:', destination)
+
+# Unfortunately HTTPS URLs do not contain enough info to clarify which
+# DVCS is being used, so SSH is easiest to support.
+vcs = find('^[ssh://]?(.*)@', origin,
+           'URL does not contain SSH user (e.g., git@ or hg@).')
+print('version control system:', vcs)
+    
+domain = find('@(.*\.\w+)[:|/]', origin,
+              'Error: Could not parse domain from origin URL.')
+print('domain:', domain)
+
+path = find('@.*\.\w+([:|/].*)[.git]?$', origin,
+         'Error: Could not parse repo path from origin URL.')
+path = re.sub(':', '/', path)
+print('repo path:', path)
+
+homepage = 'https://' + domain + path
+print(homepage)
+
+data = urllib.request.urlopen(homepage).read()
+soup = BeautifulSoup(data)
+
+# Version control system specifics.
+if ('git@' in origin):
+    ext = '.git'
+    clone = 'git clone %s %s'
+    setUpstream = 'git remote add upstream %s'
+elif ('hg@' in origin):
+    ext = ''
+    clone = 'hg clone %s %s'
+    setUpstream = 'echo "upstream = %s \n" >> .hg/hgrc'
+else:
+    print('Error: Version control system not supported.')
+    exit()
+
+upstream = None
+if ('github.com' in origin):
+    element = soup.find('span', class_='fork-flag')
+    if element:
+        upstreamBase = element.span.a['href']
+        upstream = 'https://github.com' + upstreamBase + ext
+elif ('bitbucket.org' in origin):
+    element = soup.find('a', class_='fork-of')
+    if element:
+        upstreamBase = element['href']
+        upstream = 'https://bitbucket.org' + upstreamBase + ext
+else:
+    print('Warning: Web host not supported.')
+    print('Warning: Continuing to clone without adding upstream repo.')
+    
+print(upstream)
+    
+subprocess.Popen(clone % (origin, destination), shell=True).wait()
+if upstream:
+    subprocess.Popen(setUpstream % upstream, cwd=destination, shell=True).wait()
